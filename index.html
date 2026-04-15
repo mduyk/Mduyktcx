@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DELTA RSL - SHOP 1</title>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+    <style>
+        :root { --bg: #0d0d16; --card: #161625; --cyan: #00f2ff; --gold: #ffcc00; --red: #ff4444; --green: #00ff88; --purple: #bf5af2; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; padding: 15px; margin: 0; }
+        .box { background: var(--card); padding: 20px; border-radius: 15px; border: 1px solid #333; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #000; color: #fff; box-sizing: border-box; outline: none; }
+        button { border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+        .btn-main { background: var(--cyan); color: #000; }
+        .btn-nap { background: var(--gold); color: #000; margin-top: 10px; }
+        .balance { color: var(--gold); font-size: 24px; font-weight: bold; }
+        .hist-table { width: 100%; font-size: 12px; border-collapse: collapse; margin-top: 10px; }
+        .hist-table td { padding: 8px; border-bottom: 1px solid #222; }
+        .status-success { color: var(--green); }
+        .qr-area { text-align: center; background: #000; padding: 15px; border-radius: 12px; margin: 15px 0; border: 1px solid var(--cyan); }
+        .section-title { font-size: 13px; font-weight: bold; margin-bottom: 15px; display: block; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+
+<div style="max-width: 450px; margin: auto;">
+    <h2 style="text-align:center; color: var(--cyan); text-shadow: 0 0 10px var(--cyan);">DELTA RSL - SHOP 1</h2>
+
+    <div id="auth-area" class="box">
+        <input type="text" id="auth-user" placeholder="Tài khoản..." oninput="this.value = this.value.toLowerCase()">
+        <input type="password" id="auth-pass" placeholder="Mật khẩu...">
+        <button class="btn-main" onclick="handleAuth('login')">ĐĂNG NHẬP</button>
+        <button onclick="handleAuth('register')" style="background:none; color:#666; margin-top:10px; font-size:11px">Đăng ký thành viên</button>
+    </div>
+
+    <div id="user-area" class="box" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>ID: <b id="display-name" style="color:var(--cyan)"></b></span>
+            <span onclick="logout()" style="color:#555; cursor:pointer; font-size:11px">[Thoát]</span>
+        </div>
+        <div style="margin: 15px 0;">Ví tiền: <span class="balance" id="user-balance">0</span> VNĐ</div>
+        
+        <div class="qr-area">
+            <img id="qr-img" src="" style="width: 120px; border-radius: 10px;">
+            <div id="memo-txt" style="color:var(--gold); font-weight:bold; margin-top:5px; font-size:16px;">NAP ...</div>
+        </div>
+        <input type="number" id="nap-amount" placeholder="Số tiền nạp...">
+        <button class="btn-nap" onclick="sendRequest()">GỬI YÊU CẦU NẠP</button>
+    </div>
+
+    <div class="box" style="border: 1px solid var(--purple);">
+        <span class="section-title" style="color:var(--purple)">🎲 SỰ KIỆN ƯU ĐÃI</span>
+        <div id="list-r-tuan"></div>
+        <div id="list-r-thang" style="margin: 10px 0;"></div>
+        <div id="list-r-nam"></div>
+    </div>
+
+    <div class="box">
+        <span class="section-title" style="color:var(--green)">⚡ DANH MỤC KEY CỐ ĐỊNH</span>
+        <div id="list-ngay"></div>
+        <div id="list-tuan" style="margin: 10px 0;"></div>
+        <div id="list-thang" style="margin-bottom: 10px;"></div>
+        <div id="list-nam"></div>
+    </div>
+
+    <div class="box">
+        <span class="section-title" style="color:var(--cyan)">🔑 KEY ĐÃ NHẬN</span>
+        <table class="hist-table"><tbody id="hist-key"></tbody></table>
+    </div>
+</div>
+
+<script>
+    const config = {
+        apiKey: "AIzaSyBk6R1TDZeAxh37JQLgL_6Wl0v8m8Sg0",
+        authDomain: "shopctv-61f96.firebaseapp.com",
+        databaseURL: "https://shopctv-61f96-default-rtdb.asia-southeast1.firebasedatabase.app/", 
+        projectId: "shopctv-61f96",
+        appId: "1:610663182342:web:83e255ec7921609395f190"
+    };
+    firebase.initializeApp(config);
+    const db = firebase.database();
+    let currentUser = null;
+
+    function handleAuth(type) {
+        const u = document.getElementById('auth-user').value.trim().toLowerCase();
+        const p = document.getElementById('auth-pass').value.trim();
+        if(!u || !p) return;
+        db.ref('users_shop1/'+u).once('value', s => {
+            if(type==='register'){
+                if(s.val()) return alert("Tài khoản đã tồn tại");
+                db.ref('users_shop1/'+u).set({password:p, balance:0}).then(()=>alert("Đăng ký thành công"));
+            } else {
+                if(s.val() && s.val().password == p) enterShop(u); else alert("Thông tin sai");
+            }
+        });
+    }
+
+    function enterShop(u) {
+        currentUser = u;
+        document.getElementById('auth-area').style.display='none';
+        document.getElementById('user-area').style.display='block';
+        document.getElementById('display-name').innerText = u;
+        document.getElementById('memo-txt').innerText = "NAP " + u;
+        document.getElementById('qr-img').src = `https://img.vietqr.io/image/MB-0588807300000-compact2.png?addInfo=NAP%20${u}`;
+        db.ref('users_shop1/'+u+'/balance').on('value', s => { document.getElementById('user-balance').innerText = (s.val()||0).toLocaleString(); });
+        db.ref('history_keys/'+u).on('value', s => {
+            const b = document.getElementById('hist-key'); b.innerHTML = "";
+            for(let id in s.val()) b.innerHTML = `<tr><td>${s.val()[id].time}</td><td style="color:var(--cyan)">${s.val()[id].key}</td></tr>` + b.innerHTML;
+        });
+    }
+
+    function sendRequest() {
+        const amt = document.getElementById('nap-amount').value;
+        if(!amt || amt < 1000) return alert("Số tiền không hợp lệ");
+        const time = new Date().toLocaleTimeString();
+        const rid = db.ref('bank_requests').push().key;
+        db.ref('bank_requests/'+rid).set({ user: currentUser, amount: amt, shop: 'users_shop1', time: time, id: rid });
+        db.ref('history_pay/'+currentUser+'/'+rid).set({ time: time, amount: amt, status: 'Pending' });
+        alert("Đã gửi yêu cầu");
+    }
+
+    function execRandom(mode, price, lmt, target) {
+        if(!currentUser) return;
+        db.ref('users_shop1/'+currentUser+'/balance').once('value', s => {
+            const b = s.val()||0;
+            if(b < price) return alert("Không đủ tiền");
+            db.ref('sys/v1/'+mode).transaction(c => (c || 0) + 1, (err, comm, snap) => {
+                const val = snap.val();
+                db.ref('users_shop1/'+currentUser+'/balance').set(b - price);
+                const t = new Date().toLocaleTimeString();
+                let win = (mode === 'r3') ? (Math.random() < 0.02) : (val % lmt === 0);
+                if(win) {
+                    db.ref('keys/shop1/'+target).limitToFirst(1).once('value', k => {
+                        if(!k.val()) {
+                            db.ref('history_keys/'+currentUser).push({ key: "Chúc may mắn lần sau!", time: t });
+                            alert("Kết quả: Không trúng thưởng");
+                        } else {
+                            const kid = Object.keys(k.val())[0];
+                            const kv = k.val()[kid];
+                            db.ref('keys/shop1/'+target+'/'+kid).remove();
+                            db.ref('history_keys/'+currentUser).push({ key: kv, time: t });
+                            alert("CHÚC MỪNG: " + kv);
+                        }
+                    });
+                } else {
+                    db.ref('history_keys/'+currentUser).push({ key: "Chúc may mắn lần sau!", time: t });
+                    alert("Kết quả: Không trúng thưởng");
+                }
+            });
+        });
+    }
+
+    function buyNormal(path, price) {
+        db.ref('users_shop1/'+currentUser+'/balance').once('value', s => {
+            const b = s.val()||0;
+            if(b < price) return alert("Không đủ tiền");
+            db.ref('keys/shop1/'+path).limitToFirst(1).once('value', k => {
+                if(!k.val()) return alert("Hết hàng");
+                const kid = Object.keys(k.val())[0];
+                const kv = k.val()[kid];
+                db.ref('users_shop1/'+currentUser+'/balance').set(b - price);
+                db.ref('keys/shop1/'+path+'/'+kid).remove();
+                db.ref('history_keys/'+currentUser).push({ key: kv, time: new Date().toLocaleTimeString() });
+                alert("Mua thành công");
+            });
+        });
+    }
+
+    function render(p, id, pr, lb, isR, lmt, target) {
+        const action = isR ? `execRandom('${p}', ${pr}, ${lmt}, '${target}')` : `buyNormal('${p}', ${pr})`;
+        document.getElementById(id).innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>${lb}</span>
+                <button onclick="${action}" style="width:115px; padding:8px; background:var(--cyan); color:#000; font-size:11px;">
+                    ${pr.toLocaleString()}đ
+                </button>
+            </div>`;
+    }
+
+    function logout(){ location.reload(); }
+
+    render('ngay', 'list-ngay', 20000, 'Gói Ngày', false);
+    render('tuan', 'list-tuan', 40000, 'Gói Tuần', false);
+    render('thang', 'list-thang', 80000, 'Gói Tháng', false);
+    render('nam', 'list-nam', 300000, 'Gói Năm', false);
+    render('r1', 'list-r-tuan', 20000, 'Random Tuần', true, 11, 'tuan');
+    render('r2', 'list-r-thang', 40000, 'Random Tháng', true, 10, 'thang');
+    render('r3', 'list-r-nam', 70000, 'Random Năm', true, 50, 'nam');
+
+</script>
+</body>
+</html>
